@@ -1,0 +1,6 @@
+myenv/
+__pycache__/
+./profile_results.prof
+./debug.log
+./main.py.lprof
+./training.log

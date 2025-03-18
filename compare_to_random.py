@@ -1,5 +1,7 @@
 import Arena
-from MCTS import MCTS
+
+#from MCTS import MCTS #python
+from mcts_cy import MCTS #cython
 
 from mastergoal.MastergoalGame import MastergoalGame 
 from mastergoal.NNet import NNetWrapper as nn

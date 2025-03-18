@@ -10,7 +10,9 @@ import numpy as np
 from tqdm import tqdm
 
 from Arena import Arena
-from MCTS import MCTS
+
+#from MCTS import MCTS #python
+from mcts_cy import MCTS #cython
 
 log = logging.getLogger(__name__)
 

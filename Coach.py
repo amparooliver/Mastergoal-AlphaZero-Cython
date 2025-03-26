@@ -10,9 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from Arena import Arena
-
-#from MCTS import MCTS #python
-from mcts_cy import MCTS #cython
+from MCTS import MCTS
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +30,6 @@ class Coach():
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
 
-    #@profile # For detailed profiling (kernprof -l -v main.py)
     def executeEpisode(self):
         """
         This function executes one episode of self-play, starting with player 1.
@@ -58,14 +55,14 @@ class Coach():
             episodeStep += 1
 
             canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
-
+            print(f"Turn: #{episodeStep}")
             if self.args.verbose:
                 canonicalBoard.display()
             if episodeStep % 10 == 0:
                 log.info(f"Turn #{episodeStep}")
-
+            
             temp = int(episodeStep < self.args.tempThreshold)
-            print(f"Episode: {episodeStep} and Current temp: {temp}")
+            
 
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
             sym = self.game.getSymmetries(canonicalBoard, pi)

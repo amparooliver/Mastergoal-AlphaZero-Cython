@@ -6,6 +6,7 @@ Board size is 15x11.
 '''
 import numpy as np
 from enum import IntEnum
+import requests
 
 # Definición de constantes
 NUM_PLANES = 5  # 1 para pelota, 1 para jugador rojo, 1 para jugador blanco, 1 para turno actual, 1 para nro de moves
@@ -74,17 +75,6 @@ class MastergoalBoard():
             for col in range(self.cols):
                 if self.pieces[row][col] == 1:
                     self.addPlayerMoves(moves, row, col)
-        '''
-        # Log readable moves
-        valid_moves_list = []
-        for move_index in range(16):
-            for kick_index in range(33):
-                if moves[move_index][kick_index]:
-                    piece_move = self.decode_move(move_index)
-                    ball_kick = self.decode_kick(kick_index)
-                    valid_moves_list.append((piece_move, ball_kick))
-        print(f"Valid moves (decoded): {valid_moves_list}")
-        '''
         return moves
 
     def addPlayerMoves(self, moves, row, col):
@@ -433,3 +423,4 @@ class MastergoalBoard():
             print("")
         
         #print(f"Ahora es el turno del jugador: {'Rojo' if self.red_turn else 'Blanco'}")  # Indicar el turno del jugador
+

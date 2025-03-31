@@ -1,4 +1,5 @@
 myenv/
+new/
 __pycache__/
 training.log
-debug.log
+training_plots/

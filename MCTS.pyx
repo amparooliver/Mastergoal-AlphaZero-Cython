@@ -45,7 +45,7 @@ cdef class MCTSNode:
         self.is_terminal = False
         self.valid_moves = valid_moves if valid_moves is not None else np.array([])
 
-cdef class CythonMCTS:
+cdef class MCTS:
     cdef:
         object game
         object neural_network
@@ -65,16 +65,16 @@ cdef class CythonMCTS:
         self.neural_network = neural_network
         self.args = args
 
-    cpdef np.ndarray get_action_probabilities(self, state, double temperature=1.0):
+    cpdef np.ndarray getActionProb(self, state, double temp=1.0):
         """
-        Execute MCTS simulations and return action probabilities
+        Execute MCTS simulations and return action probabilities for full action space
         
         Args:
             state: Current game state
-            temperature: Exploration parameter
+            temp: Exploration parameter
         
         Returns:
-            numpy array of action probabilities
+            numpy array of action probabilities for full action space
         """
         # Reset the search tree
         self.root = self._create_root_node(state)
@@ -83,22 +83,36 @@ cdef class CythonMCTS:
         for _ in range(self.args.numMCTSSims):
             self._search(self.root)
 
-        # Compute action probabilities based on visit counts
-        cdef np.ndarray visit_counts = np.array([
-            child.visit_count for child in self.root.children
-        ])
+        # Get valid moves from the game
+        cdef np.ndarray valid_moves = self.game.getValidMoves(state, 1)
 
-        # Deterministic policy for low temperature
-        if temperature == 0:
-            best_actions = np.argwhere(visit_counts == np.max(visit_counts)).flatten()
-            probs = np.zeros_like(visit_counts)
-            probs[np.random.choice(best_actions)] = 1.0
-            return probs
+        # Initialize full action space probability vector
+        cdef np.ndarray full_probs = np.zeros(self.game.getActionSize(), dtype=np.float64)
 
-        # Compute probabilistic policy
-        cdef np.ndarray scaled_counts = visit_counts ** (1.0 / temperature)
-        cdef double total = np.sum(scaled_counts)
-        return scaled_counts / total
+        # Compute action probabilities based on visit counts of valid children
+        cdef np.ndarray visit_counts = np.zeros(len(self.root.children), dtype=np.int64)
+        cdef int max_visit_index
+        cdef double total
+        
+        # Populate visit counts
+        for i in range(len(self.root.children)):
+            visit_counts[i] = self.root.children[i].visit_count
+
+        # Deterministic policy for low temp
+        if temp == 0:
+            max_visit_index = np.argmax(visit_counts)
+            full_probs[self.root.children[max_visit_index].action] = 1.0
+            return full_probs
+
+        # Compute probabilistic policy for valid actions
+        cdef np.ndarray scaled_counts = visit_counts ** (1.0 / temp)
+        total = np.sum(scaled_counts)
+        
+        # Populate the full probability vector
+        for i in range(len(self.root.children)):
+            full_probs[self.root.children[i].action] = scaled_counts[i] / total
+
+        return full_probs
 
     cdef MCTSNode _create_root_node(self, state):
         """
@@ -115,6 +129,9 @@ cdef class CythonMCTS:
         
         # Get valid moves
         cdef np.ndarray valid_moves = self.game.getValidMoves(state, 1)
+
+        #DEBUG
+        #print(f"Valid Moves Node: {valid_moves}")
         
         # Mask policy with valid moves
         policy *= valid_moves
@@ -127,14 +144,16 @@ cdef class CythonMCTS:
             policy = valid_moves / np.sum(valid_moves)
 
         # Create root node
-        root = MCTSNode(state=state, valid_moves=valid_moves)
+        root = MCTSNode(state=state, valid_moves=valid_moves, action=-1)
         
+        #print(f"Policy: {policy}")
         # Expand child nodes
         for action in range(len(policy)):
             if valid_moves[action]:
-                next_state, _ = self.game.getNextState(state, 1, action)
-                next_state = self.game.getCanonicalForm(next_state, -1)
-                
+                next_state, next_player = self.game.getNextState(state, 1, action)
+                #print(f"Next state for the valid move: {next_state}")
+                #next_state = self.game.getCanonicalForm(next_state, next_player)
+                #print(f"Next state in canonical?: {next_state}")
                 child = MCTSNode(
                     state=next_state, 
                     prior=policy[action], 
@@ -148,76 +167,84 @@ cdef class CythonMCTS:
     cdef double _search(self, MCTSNode node):
         """
         Single MCTS search iteration
-        
-        Args:
-            node: Current search node
-        
-        Returns:
-            Value of the searched node
         """
-        # Terminal state check
-        if node.is_terminal:
-            return -self.game.getGameEnded(node.state, 1)
+        # **1. Check if state is terminal**
+        game_result = self.game.getGameEnded(node.state, 1)  # Get the game outcome
+        #print(f"Checking if terminal: {game_result}")
+        
+        if game_result != 0:  # Non-zero means game has ended
+            node.is_terminal = True  # Mark node as terminal
+            #print(f"Node is terminal with result: {game_result}")
+            return -game_result  # Return the negated value for backpropagation
 
-        # Expand leaf nodes
+        # **2. Expand leaf nodes**
         if not node.children:
             policy, value = self.neural_network.predict(node.state)
             valid_moves = self.game.getValidMoves(node.state, 1)
+            
+            #print(f"Expanding node. Policy: {policy}, Value: {value}, Valid Moves: {valid_moves}")
             
             # Mask and normalize policy
             policy *= valid_moves
             policy_sum = np.sum(policy)
             policy = policy / policy_sum if policy_sum > 0 else valid_moves / np.sum(valid_moves)
+            #print(f"Normalized Policy: {policy}")
 
             # Create child nodes
             for action in range(len(policy)):
                 if valid_moves[action]:
                     next_state, _ = self.game.getNextState(node.state, 1, action)
                     next_state = self.game.getCanonicalForm(next_state, -1)
-                    
+                    #print(f"Creating child for action {action}, next state: {next_state}")
+
                     child = MCTSNode(
-                        state=next_state, 
-                        prior=policy[action], 
-                        action=action, 
+                        state=next_state,
+                        prior=policy[action],
+                        action=action,
                         parent=node
                     )
                     node.children.append(child)
 
-            return -value
+            return -value  # Backpropagate value
 
-        # Select best child using UCB
+        # **3. Select best child using UCB**
         cdef MCTSNode best_child = None
         cdef double best_ucb = float('-inf')
         cdef double ucb, exploration_term
 
         for child in node.children:
-            # Compute UCB
             if child.visit_count == 0:
                 ucb = self.args.cpuct * child.prior * sqrt(node.visit_count + EPS)
             else:
-                # Q-value + exploration term
                 exploration_term = (
-                    self.args.cpuct * 
-                    child.prior * 
-                    sqrt(node.visit_count) / 
+                    self.args.cpuct *
+                    child.prior *
+                    sqrt(node.visit_count) /
                     (1 + child.visit_count)
                 )
                 ucb = child.value_sum / child.visit_count + exploration_term
+            
+            #print(f"Child {child.action}: visit_count={child.visit_count}, UCB={ucb}")
 
             if ucb > best_ucb:
                 best_ucb = ucb
                 best_child = child
 
-        # Recursively search selected child
+        #print(f"Best child selected: {best_child.action} with UCB: {best_ucb}")
+
+        # **4. Recursively search selected child**
         value = self._search(best_child)
+        #print(f"Backpropagating value: {value}")
         value = -value
 
-        # Update node statistics
+        # **5. Update node statistics**
         best_child.value_sum += value
         best_child.visit_count += 1
+        #print(f"Updated child {best_child.action}: value_sum={best_child.value_sum}, visit_count={best_child.visit_count}")
 
         return value
 
+
 # Recommended usage
 # mcts = CythonMCTS(game, neural_network, args)
-# action_probs = mcts.get_action_probabilities(initial_state)
+# action_probs = mcts.getActionProb(initial_state)

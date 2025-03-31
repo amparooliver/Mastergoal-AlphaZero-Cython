@@ -55,7 +55,7 @@ class Coach():
             episodeStep += 1
 
             canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
-            print(f"Turn: #{episodeStep}")
+            #print(f"Turn: #{episodeStep}")
             if self.args.verbose:
                 canonicalBoard.display()
             if episodeStep % 10 == 0:
@@ -65,11 +65,13 @@ class Coach():
             
 
             pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
+            #print(f"Action prob: {pi}")
             sym = self.game.getSymmetries(canonicalBoard, pi)
             for b, p in sym:
                 trainExamples.append([b.encode(), self.curPlayer, p, None])
 
             action = np.random.choice(len(pi), p=pi)
+            #print(f"ACTION EN COACH: {action}")
             board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action, verbose=self.args.verbose)
 
             r = self.game.getGameEnded(board, self.curPlayer, verbose=self.args.verbose)

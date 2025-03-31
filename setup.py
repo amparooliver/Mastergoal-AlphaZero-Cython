@@ -1,8 +1,17 @@
-from setuptools import setup
+from setuptools import setup, Extension
 from Cython.Build import cythonize
-import numpy
+import numpy  # Make sure numpy is installed
+
+extensions = [
+    Extension(
+        "MCTS",
+        ["MCTS.pyx"],
+        language="c++",  # This is the crucial change
+        include_dirs=[numpy.get_include()]  # Include numpy headers
+    )
+]
 
 setup(
-    ext_modules=cythonize("MCTS.pyx", annotate=True, language_level=3),
-    include_dirs=[numpy.get_include()] # Include numpy directory.
+    name="MCTS",
+    ext_modules=cythonize(extensions),
 )
